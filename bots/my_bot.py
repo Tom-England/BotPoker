@@ -16,7 +16,7 @@ On Windows, type `python` (or `py`) instead of `python3`.
 from pokerbot import all_in, call, check, fold, raise_to, run
 from pokerbot.cards import describe_hand, hand_strength, is_pair, rank
 
-BOT_NAME = "MyBot"   # change this to your team's name!
+BOT_NAME = "Winobot"   # change this to your team's name!
 
 
 def decide(state):
@@ -80,4 +80,6 @@ def decide(state):
 # ----------------------------------------------------------------------
 # You don't need to change anything below this line.
 if __name__ == "__main__":
+    # Fuck you I do what I want
+    print("Running my program below the line fuck all y'all")
     run(decide, name=BOT_NAME)

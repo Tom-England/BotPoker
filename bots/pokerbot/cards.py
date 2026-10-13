@@ -8,6 +8,7 @@ Ranks: 2 3 4 5 6 7 8 9 T J Q K A
 Suits: c (clubs), d (diamonds), h (hearts), s (spades)
 """
 from collections import Counter
+import itertools
 
 RANKS = "23456789TJQKA"
 RANK_NAMES = {"2": "Two", "3": "Three", "4": "Four", "5": "Five", "6": "Six",
@@ -93,28 +94,122 @@ def describe_hand(my_cards: list[str], board: list[str]) -> str:
     return HAND_TYPES[hand_type(my_cards + board)]
 
 
+def get_oppcards (my_cards: list[str], board: list[str]) -> str:
+    split_ranks = [rank for rank in RANKS]
+    suits = list(SUIT_NAMES.keys())
+    iterations = list(itertools.product(split_ranks,suits))
+    total_cards = [a+b for (a,b) in iterations]
+    for card in my_cards:
+        total_cards.remove(card)
+    for card in board:
+        total_cards.remove(card)
+    #print (f"There are {len(my_cards)} and {len(board)} cards so total cards = {len(total_cards)}")
+    return total_cards
+
+def gen_opphand(oppcards):
+    return itertools.combinations(oppcards,2)
+
+def gen_possible_rivers (my_cards: list[str], board: list[str]) -> str:
+    remaining_cards = get_oppcards(my_cards, board)
+    remaining_river_endings = list(itertools.combinations(remaining_cards, 2))
+    remaining_rivers = [board + [a, b] for [a, b] in remaining_river_endings]
+    return remaining_rivers
+
+def local_hand_strength(my_cards: list[str], board: list[str]) -> float:
+    """
+    ahead = tied = behind = 0
+    ourrank = Rank(ourcards, boardcards)
+
+    for each case(oppcards) {
+        opprank = Rank(oppcards, boardcards)
+        if (ourrank > opprank) ahead += 1
+        else if (ourrank == opprank) tied += 1
+        else behind += 1
+    }
+
+    handstrength = (ahead + tied / 2) / (ahead + tied + behind)
+
+    return handstrength
+    """
+    ahead = 0
+    tied = 0
+    behind = 0
+
+    ourrank = hand_type(my_cards + board)
+    oppcards = get_oppcards(my_cards, board)
+    
+    for case in gen_opphand(oppcards):
+        opprank = hand_type(list(case) + board)
+        if (ourrank > opprank):
+            ahead += 1
+        elif (ourrank == opprank):
+            tied += 1
+        else:
+            behind += 1
+
+    hand_strength = (ahead + (tied / 2)) / (ahead + tied + behind)
+    return hand_strength
+
+def hand_potential(my_cards: list[str], board: list[str]) -> float:
+    AHEAD = 0
+    TIED = 1
+    BEHIND = 2
+    
+    HP = [
+        [0,0,0],
+        [0,0,0],
+        [0,0,0]
+	]
+    HPTotal = [0,0,0]
+    ourrank = hand_type(my_cards + board)
+    oppcards = get_oppcards(my_cards, board)
+
+    index = AHEAD
+
+    possible_rivers = gen_possible_rivers(my_cards, board)
+    i = 0
+    j = 0
+    opphands = list(gen_opphand(oppcards))
+    for case in opphands:
+        i += 1
+        j = 0
+        opprank = hand_type(list(case) + board)
+        if (ourrank > opprank):
+            index = AHEAD
+        elif (ourrank == opprank):
+            index = TIED
+        else:
+            index = BEHIND
+        HPTotal[index] += 1
+        #print(f"{i}/{len(opphands)} - {j}/{len(possible_rivers)}")
+        for river in possible_rivers:
+            j+=1
+            
+            possible = True
+            for card in river: 
+                if card in case or card in my_cards:
+                    possible = False 
+            if possible:
+                ourbest = hand_type(my_cards + river)
+                oppbest = hand_type(list(case) + river)
+                if (ourbest > oppbest):
+                    HP[index][AHEAD] += 1
+                elif (ourbest == oppbest):
+                    HP[index][TIED] += 1
+                else:
+                    HP[index][BEHIND] += 1
+
+    print (HP)
+
+    p_pot = (HP[BEHIND][AHEAD] + (HP[BEHIND][TIED] / 2) + (HP[TIED][AHEAD] / 2)) / (HPTotal[BEHIND] + HPTotal[TIED])
+    n_pot = (HP[AHEAD][BEHIND] + (HP[TIED][BEHIND] / 2) + (HP[AHEAD][TIED] / 2)) / (HPTotal[AHEAD] + HPTotal[TIED])
+
+    return [p_pot, n_pot]
+
 def hand_strength(my_cards: list[str], board: list[str]) -> float:
-    """
-    A rough score for your hand from 0 (terrible) to 1 (unbeatable).
+    [p_pot, n_pot] = hand_potential(my_cards, board)
+    HS = local_hand_strength (my_cards, board)
 
-    This is deliberately simple, so improving it is a great place to start.
-    It doesn't know whether the board helps your opponents just as much.
-    """
-    kind = hand_type(my_cards + board)
-    high = max(rank(c) for c in my_cards) if my_cards else 2
-    low = min(rank(c) for c in my_cards) if my_cards else 2
-
-    if kind >= 2:
-        # Two pair or better: 0.6 up to 1.0
-        return 0.6 + 0.05 * kind
-    if kind == 1:
-        # One pair: 0.4-0.5, higher for a higher card in your hand
-        return 0.4 + 0.1 * (high - 2) / 12
-
-    # Nothing made yet: judge your two cards
-    score = 0.1 + 0.15 * (high - 2) / 12 + 0.1 * (low - 2) / 12
-    if is_suited(my_cards):
-        score += 0.05
-    if abs(high - low) == 1:
-        score += 0.05                # connected, e.g. 9 and 10
-    return score
+    print(f"HS = {HS}, p_pot = {p_pot}, n_pot = {n_pot}")
+	
+    return (HS * (1-n_pot)) + ((1-HS) * p_pot)
