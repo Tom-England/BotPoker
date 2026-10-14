@@ -113,8 +113,8 @@ def gen_possible_rivers (my_cards: list[str], board: list[str], case: list[str])
     remaining_cards = get_oppcards(my_cards, board)
     for card in case:
         remaining_cards.remove(card)
-    remaining_river_endings = list(itertools.combinations(remaining_cards, 2))
-    remaining_rivers = [board + [a, b] for [a, b] in remaining_river_endings]
+    remaining_river_endings = list(itertools.combinations(remaining_cards, 5 - len(board)))
+    remaining_rivers = [board + list(a) for a in remaining_river_endings]
     return remaining_rivers
 
 def local_hand_strength(my_cards: list[str], board: list[str]) -> float:
@@ -198,7 +198,7 @@ def hand_potential(my_cards: list[str], board: list[str]) -> float:
         #print(f"{i}/{len(opphands)} - {j}/{len(possible_rivers)}")
         
         possible_rivers = gen_possible_rivers(my_cards, board, list(case))
-        #print(f"{len(possible_rivers)}")
+        print(f"{len(possible_rivers)}")
         for river in possible_rivers:
             j+=1
             ourbest = hand_type(my_cards + river)
@@ -229,8 +229,8 @@ def hand_potential(my_cards: list[str], board: list[str]) -> float:
     print (HP)
     print (HPTotal)
 
-    p_pot = (HP[BEHIND][AHEAD] + (HP[BEHIND][TIED] / 2) + (HP[TIED][AHEAD] / 2)) / (HPTotal[BEHIND] + HPTotal[TIED])
-    n_pot = (HP[AHEAD][BEHIND] + (HP[TIED][BEHIND] / 2) + (HP[AHEAD][TIED] / 2)) / (HPTotal[AHEAD] + HPTotal[TIED])
+    p_pot = ((HP[BEHIND][AHEAD] + (HP[BEHIND][TIED] / 2) + (HP[TIED][AHEAD] / 2)) / (HPTotal[BEHIND] + HPTotal[TIED])) / 1000
+    n_pot = ((HP[AHEAD][BEHIND] + (HP[TIED][BEHIND] / 2) + (HP[AHEAD][TIED] / 2)) / (HPTotal[AHEAD] + HPTotal[TIED])) / 1000
 
     return [p_pot, n_pot]
 

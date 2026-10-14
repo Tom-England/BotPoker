@@ -3,7 +3,7 @@ from pokerbot.cards import hand_strength
 import time
 
 start = time.perf_counter()
-strenght = hand_strength(["Ad", "Qc"], ["3h", "4c", "Jh"])
+strength = hand_strength(["6d", "7c"], ["3h", "4c", "5h"])
 end = time.perf_counter()
-print(strenght)
+print(f"strength: {strength}%")
 print(f"Elapsed: {(end - start):.3f} s")
