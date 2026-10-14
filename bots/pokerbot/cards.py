@@ -109,8 +109,10 @@ def get_oppcards (my_cards: list[str], board: list[str]) -> str:
 def gen_opphand(oppcards):
     return itertools.combinations(oppcards,2)
 
-def gen_possible_rivers (my_cards: list[str], board: list[str]) -> str:
+def gen_possible_rivers (my_cards: list[str], board: list[str], case: list[str]) -> str:
     remaining_cards = get_oppcards(my_cards, board)
+    for card in case:
+        remaining_cards.remove(card)
     remaining_river_endings = list(itertools.combinations(remaining_cards, 2))
     remaining_rivers = [board + [a, b] for [a, b] in remaining_river_endings]
     return remaining_rivers
@@ -166,7 +168,7 @@ def hand_potential(my_cards: list[str], board: list[str]) -> float:
 
     index = AHEAD
 
-    possible_rivers = gen_possible_rivers(my_cards, board)
+    
     i = 0
     j = 0
     opphands = list(gen_opphand(oppcards))
@@ -194,25 +196,36 @@ def hand_potential(my_cards: list[str], board: list[str]) -> float:
             index = BEHIND
         HPTotal[index] += 1
         #print(f"{i}/{len(opphands)} - {j}/{len(possible_rivers)}")
-        """
+        
+        possible_rivers = gen_possible_rivers(my_cards, board, list(case))
+        #print(f"{len(possible_rivers)}")
         for river in possible_rivers:
             j+=1
-            
-            possible = True
-            for card in river: 
-                if card in case or card in my_cards:
-                    possible = False 
-            if possible:
-                ourbest = hand_type(my_cards + river)
-                oppbest = hand_type(list(case) + river)
-                if (ourbest > oppbest):
-                    HP[index][AHEAD] += 1
-                elif (ourbest == oppbest):
-                    HP[index][TIED] += 1
+            ourbest = hand_type(my_cards + river)
+            oppbest = hand_type(list(case) + river)
+            if (ourbest > oppbest):
+                HP[index][AHEAD] += 1
+            elif (ourbest == oppbest):
+                index2 = -1
+                player_max_rank = max(rank(my_cards[0]),rank(my_cards[1]))
+                opp_max_rank = max(rank(case[0]),rank(case[1]))
+                if player_max_rank > opp_max_rank:
+                    index2 = AHEAD
+                elif player_max_rank == opp_max_rank:
+                    if min(rank(my_cards[0]),rank(my_cards[1])) > min(rank(case[0]),rank(case[1])):
+                        index2 = AHEAD
+                    elif min(rank(my_cards[0]),rank(my_cards[1])) == min(rank(case[0]),rank(case[1])):
+                        index2 = TIED
+                    else:
+                        index2 = BEHIND
                 else:
-                    HP[index][BEHIND] += 1"""
-                    
+                    index2 = BEHIND
 
+				
+                HP[index][index2] += 1
+            else:
+                HP[index][BEHIND] += 1
+                    
     print (HP)
     print (HPTotal)
 
