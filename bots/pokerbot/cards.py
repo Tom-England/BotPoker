@@ -9,6 +9,8 @@ Suits: c (clubs), d (diamonds), h (hearts), s (spades)
 """
 from collections import Counter
 import itertools
+from multiprocessing import Process, Queue
+from math import ceil
 
 RANKS = "23456789TJQKA"
 RANK_NAMES = {"2": "Two", "3": "Three", "4": "Four", "5": "Five", "6": "Six",
@@ -20,6 +22,9 @@ SUIT_NAMES = {"c": "Clubs", "d": "Diamonds", "h": "Hearts", "s": "Spades"}
 HAND_TYPES = ["High card", "Pair", "Two pair", "Three of a kind", "Straight",
               "Flush", "Full house", "Four of a kind", "Straight flush"]
 
+AHEAD = 0
+TIED = 1
+BEHIND = 2
 
 def rank(card: str) -> int:
     """The card's rank as a number: 2-10, Jack = 11, Queen = 12, King = 13, Ace = 14.
@@ -152,11 +157,59 @@ def local_hand_strength(my_cards: list[str], board: list[str]) -> float:
     hand_strength = (ahead + (tied / 2)) / (ahead + tied + behind)
     return hand_strength
 
+def resolve_high_card_ties(my_cards: list[str], case: list[str]) -> int:
+    index = -1
+
+    player_ranks = [rank(my_cards[0]),rank(my_cards[1])]
+    opp_ranks = [rank(case[0]),rank(case[1])]
+    player_max_rank = max(player_ranks)
+    opp_max_rank = max(opp_ranks)
+    if player_max_rank > opp_max_rank:
+        index = AHEAD
+    elif player_max_rank == opp_max_rank:
+        player_min_rank = min(player_ranks)
+        opp_min_rank = min(opp_ranks)
+        if player_min_rank > opp_min_rank:
+            index = AHEAD
+        elif player_min_rank == opp_min_rank:
+            index = TIED
+        else:
+            index = BEHIND
+    else:
+        index = BEHIND
+    return index
+
+def possible_river_thread_calc(work_queue: Queue, done_queue: Queue):
+    for (my_cards, case, rivers, index) in iter(work_queue.get, "STOP"):
+        tempHP = [
+            [0,0,0],
+            [0,0,0],
+            [0,0,0]
+        ]
+        for river in rivers:
+            ourbest = hand_type(my_cards + river)
+            oppbest = hand_type(case + river)
+            if (ourbest > oppbest):
+                tempHP[index][AHEAD] += 1
+            elif (ourbest == oppbest):
+                index2 = resolve_high_card_ties(my_cards, case)
+                tempHP[index][index2] += 1
+            else:
+                tempHP[index][BEHIND] += 1
+        done_queue.put(tempHP)
+           
+
+
+def chunk(list: list[str], n: int) -> list[list[str]]:
+    """Yield successive n-sized chunks from lst."""
+    for i in range(0, len(list), n):
+        yield list[i:i + n]
+
 def hand_potential(my_cards: list[str], board: list[str]) -> float:
-    AHEAD = 0
-    TIED = 1
-    BEHIND = 2
+
     
+    THREAD_COUNT = 10
+
     HP = [
         [0,0,0],
         [0,0,0],
@@ -172,6 +225,18 @@ def hand_potential(my_cards: list[str], board: list[str]) -> float:
     i = 0
     j = 0
     opphands = list(gen_opphand(oppcards))
+
+    work_queue = Queue()
+    done_queue = Queue()
+
+    thread_pool = []
+    #RIVER_THREAD_DICTIONARY = {}
+    for c in range(THREAD_COUNT):
+        t = Process(target=possible_river_thread_calc, args=(work_queue, done_queue))
+        thread_pool.append(t)
+    for t in thread_pool:
+        t.start()
+
     for case in opphands:
         i += 1
         j = 0
@@ -179,26 +244,38 @@ def hand_potential(my_cards: list[str], board: list[str]) -> float:
         if (ourrank > opprank):
             index = AHEAD
         elif (ourrank == opprank):
-            player_max_rank = max(rank(my_cards[0]),rank(my_cards[1]))
-            opp_max_rank = max(rank(case[0]),rank(case[1]))
-            if player_max_rank > opp_max_rank:
-                index = AHEAD
-            elif player_max_rank == opp_max_rank:
-                if min(rank(my_cards[0]),rank(my_cards[1])) > min(rank(case[0]),rank(case[1])):
-                    index = AHEAD
-                elif min(rank(my_cards[0]),rank(my_cards[1])) == min(rank(case[0]),rank(case[1])):
-                    index = TIED
-                else:
-                    index = BEHIND
-            else:
-                index = BEHIND
+            index = resolve_high_card_ties(my_cards, list(case))
         else:
             index = BEHIND
         HPTotal[index] += 1
         #print(f"{i}/{len(opphands)} - {j}/{len(possible_rivers)}")
         
         possible_rivers = gen_possible_rivers(my_cards, board, list(case))
-        print(f"{len(possible_rivers)}")
+        #print(f"{len(possible_rivers)}")
+        river_chunks = chunk(possible_rivers, ceil(len(possible_rivers) / THREAD_COUNT))
+
+        for rchunk in river_chunks:
+            work_queue.put((my_cards, list(case), rchunk, index))
+
+#my_cards, list(case), c, index,
+        #print(RIVER_THREAD_DICTIONARY)
+        #print(f"Found {len(RIVER_THREAD_DICTIONARY.keys())} keys")
+        for thread in thread_pool:
+            result = done_queue.get()
+
+            HP[0][0] += result[0][0]
+            HP[1][0] += result[1][0]
+            HP[2][0] += result[2][0]
+
+            HP[0][1] += result[0][1]
+            HP[1][1] += result[1][1]
+            HP[2][1] += result[2][1]
+
+            HP[0][2] += result[0][2]
+            HP[1][2] += result[1][2]
+            HP[2][2] += result[2][2]
+
+        """
         for river in possible_rivers:
             j+=1
             ourbest = hand_type(my_cards + river)
@@ -206,28 +283,18 @@ def hand_potential(my_cards: list[str], board: list[str]) -> float:
             if (ourbest > oppbest):
                 HP[index][AHEAD] += 1
             elif (ourbest == oppbest):
-                index2 = -1
-                player_max_rank = max(rank(my_cards[0]),rank(my_cards[1]))
-                opp_max_rank = max(rank(case[0]),rank(case[1]))
-                if player_max_rank > opp_max_rank:
-                    index2 = AHEAD
-                elif player_max_rank == opp_max_rank:
-                    if min(rank(my_cards[0]),rank(my_cards[1])) > min(rank(case[0]),rank(case[1])):
-                        index2 = AHEAD
-                    elif min(rank(my_cards[0]),rank(my_cards[1])) == min(rank(case[0]),rank(case[1])):
-                        index2 = TIED
-                    else:
-                        index2 = BEHIND
-                else:
-                    index2 = BEHIND
-
-				
+                index2 = resolve_high_card_ties(my_cards, list(case))
                 HP[index][index2] += 1
             else:
                 HP[index][BEHIND] += 1
-                    
+        """
+
     print (HP)
     print (HPTotal)
+    for t in thread_pool:
+        work_queue.put("STOP")
+    for t in thread_pool:
+        t.join()
 
     p_pot = ((HP[BEHIND][AHEAD] + (HP[BEHIND][TIED] / 2) + (HP[TIED][AHEAD] / 2)) / (HPTotal[BEHIND] + HPTotal[TIED])) / 1000
     n_pot = ((HP[AHEAD][BEHIND] + (HP[TIED][BEHIND] / 2) + (HP[AHEAD][TIED] / 2)) / (HPTotal[AHEAD] + HPTotal[TIED])) / 1000
