@@ -13,10 +13,19 @@ first: see "Practising on your own computer" in README.md):
 
 On Windows, type `python` (or `py`) instead of `python3`.
 """
+from multiprocessing import Queue, Process
+
 from pokerbot import all_in, call, check, fold, raise_to, run
-from pokerbot.cards import describe_hand, hand_strength, is_pair, rank
+from pokerbot.cards import describe_hand, hand_strength, is_pair, possible_river_thread_calc, rank
 
 BOT_NAME = "Winobot"   # change this to your team's name!
+THREAD_COUNT = 10
+
+work_queue = Queue()
+done_queue = Queue()
+
+thread_pool = []
+#RIVER_THREAD_DICTIONARY = {}
 
 
 def decide(state):
@@ -55,15 +64,32 @@ def decide(state):
 
     strength = 0
 
+
+
     # 1. go in on every flop because lifes too short to be safe
     if state.street == "preflop":
         #strong = is_pair(state.my_cards) and rank(state.my_cards[0]) >= 9
         return call()
     # Calculate hand strength
     else:
-        strength = hand_strength(state.my_cards, state.board)
+        thread_pool = []
+        for c in range(THREAD_COUNT):
+            t = Process(target=possible_river_thread_calc, args=(work_queue, done_queue))
+            thread_pool.append(t)
+        for t in thread_pool:
+            t.start()
+        strength = hand_strength(state.my_cards, state.board, thread_pool, work_queue, done_queue)
+        for t in thread_pool:
+            work_queue.put("STOP")
+        for t in thread_pool:
+            t.join()
+
         print(f"Strength: {strength}")
-        strong = strength >= 0.55
+        strong = strength >= 0.75
+        very_strong = strength >= 0.95
+
+    if very_strong and state.can_raise:
+        return all_in()
 
     # If over half odds of winning hand raise bet
     if strong and state.can_raise:
@@ -87,4 +113,11 @@ def decide(state):
 if __name__ == "__main__":
     # Fuck you I do what I want
     print("Running my program below the line fuck all y'all")
+    
+
+
     run(decide, name=BOT_NAME)
+
+
+
+#6295445377107671101

@@ -200,15 +200,28 @@ def possible_river_thread_calc(work_queue: Queue, done_queue: Queue):
            
 
 
-def chunk(list: list[str], n: int) -> list[list[str]]:
+def chunk(list: list[list[str]], n: int) -> list[list[str]]:
     """Yield successive n-sized chunks from lst."""
     for i in range(0, len(list), n):
         yield list[i:i + n]
 
-def hand_potential(my_cards: list[str], board: list[str]) -> float:
+def chunk2(list: list[str], n: int) -> list[list[str]]:
+    return_list = [[] for i in range(0, ceil(len(list) / n))]
+    rli = 0
+    counter = 0
+    for item in list:
+        return_list[rli].append(item)
+        counter += 1
+        if counter >= n:
+            counter = 0
+            rli += 1
+    return return_list
 
-    
+
+def hand_potential(my_cards: list[str], board: list[str], thread_pool, work_queue, done_queue) -> float:
+
     THREAD_COUNT = 10
+
 
     HP = [
         [0,0,0],
@@ -221,21 +234,9 @@ def hand_potential(my_cards: list[str], board: list[str]) -> float:
 
     index = AHEAD
 
-    
     i = 0
     j = 0
     opphands = list(gen_opphand(oppcards))
-
-    work_queue = Queue()
-    done_queue = Queue()
-
-    thread_pool = []
-    #RIVER_THREAD_DICTIONARY = {}
-    for c in range(THREAD_COUNT):
-        t = Process(target=possible_river_thread_calc, args=(work_queue, done_queue))
-        thread_pool.append(t)
-    for t in thread_pool:
-        t.start()
 
     for case in opphands:
         i += 1
@@ -248,20 +249,15 @@ def hand_potential(my_cards: list[str], board: list[str]) -> float:
         else:
             index = BEHIND
         HPTotal[index] += 1
-        #print(f"{i}/{len(opphands)} - {j}/{len(possible_rivers)}")
-        
+
         possible_rivers = gen_possible_rivers(my_cards, board, list(case))
-        #print(f"{len(possible_rivers)}")
-        river_chunks = chunk(possible_rivers, ceil(len(possible_rivers) / THREAD_COUNT))
+        river_chunks = chunk2(possible_rivers, ceil(len(possible_rivers) / THREAD_COUNT))
 
         for rchunk in river_chunks:
             work_queue.put((my_cards, list(case), rchunk, index))
 
-#my_cards, list(case), c, index,
-        #print(RIVER_THREAD_DICTIONARY)
-        #print(f"Found {len(RIVER_THREAD_DICTIONARY.keys())} keys")
-        for thread in thread_pool:
-            result = done_queue.get()
+        for rchunk in river_chunks:
+            result = done_queue.get(True)
 
             HP[0][0] += result[0][0]
             HP[1][0] += result[1][0]
@@ -275,36 +271,31 @@ def hand_potential(my_cards: list[str], board: list[str]) -> float:
             HP[1][2] += result[1][2]
             HP[2][2] += result[2][2]
 
-        """
-        for river in possible_rivers:
-            j+=1
-            ourbest = hand_type(my_cards + river)
-            oppbest = hand_type(list(case) + river)
-            if (ourbest > oppbest):
-                HP[index][AHEAD] += 1
-            elif (ourbest == oppbest):
-                index2 = resolve_high_card_ties(my_cards, list(case))
-                HP[index][index2] += 1
-            else:
-                HP[index][BEHIND] += 1
-        """
+        # print what's in the result queue
+        while not work_queue.empty():
+            print(work_queue.get())
 
-    print (HP)
-    print (HPTotal)
-    for t in thread_pool:
-        work_queue.put("STOP")
-    for t in thread_pool:
-        t.join()
-
-    p_pot = ((HP[BEHIND][AHEAD] + (HP[BEHIND][TIED] / 2) + (HP[TIED][AHEAD] / 2)) / (HPTotal[BEHIND] + HPTotal[TIED])) / 1000
-    n_pot = ((HP[AHEAD][BEHIND] + (HP[TIED][BEHIND] / 2) + (HP[AHEAD][TIED] / 2)) / (HPTotal[AHEAD] + HPTotal[TIED])) / 1000
-
+    print(HP)
+    print(HPTotal)
+    print((HPTotal[BEHIND] + HPTotal[TIED]))
+    print((HP[BEHIND][AHEAD] + (HP[BEHIND][TIED] / 2) + (HP[TIED][AHEAD] / 2)))
+    p_pot = 0
+    n_pot = 0
+    try: 
+        p_pot = ((HP[BEHIND][AHEAD] + HP[BEHIND][TIED] / 2 + HP[TIED][AHEAD] / 2) / (HPTotal[BEHIND] + HPTotal[TIED])) / 1000
+    except ZeroDivisionError:
+        print("Divided by 0 on p_pot, oops!") 
+    try: 
+        n_pot = ((HP[AHEAD][BEHIND] + HP[TIED][BEHIND] / 2 + HP[AHEAD][TIED] / 2) / (HPTotal[AHEAD] + HPTotal[TIED])) / 1000
+    except ZeroDivisionError:
+        print("Divided by 0 on n_pot, oops!")
     return [p_pot, n_pot]
 
-def hand_strength(my_cards: list[str], board: list[str]) -> float:
-    [p_pot, n_pot] = hand_potential(my_cards, board)
+def hand_strength(my_cards: list[str], board: list[str], thread_pool, work_queue, done_queue) -> float:
+    print("Starting hand potential calculation")
+    [p_pot, n_pot] = hand_potential(my_cards, board, thread_pool, work_queue, done_queue)
     HS = local_hand_strength (my_cards, board)
 
-    print(f"HS = {HS}, p_pot = {p_pot}, n_pot = {n_pot}")
+    #print(f"HS = {HS}, p_pot = {p_pot}, n_pot = {n_pot}")
 	
     return (HS * (1-n_pot)) + ((1-HS) * p_pot)
