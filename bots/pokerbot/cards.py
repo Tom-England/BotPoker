@@ -177,11 +177,24 @@ def hand_potential(my_cards: list[str], board: list[str]) -> float:
         if (ourrank > opprank):
             index = AHEAD
         elif (ourrank == opprank):
-            index = TIED
+            player_max_rank = max(rank(my_cards[0]),rank(my_cards[1]))
+            opp_max_rank = max(rank(case[0]),rank(case[1]))
+            if player_max_rank > opp_max_rank:
+                index = AHEAD
+            elif player_max_rank == opp_max_rank:
+                if min(rank(my_cards[0]),rank(my_cards[1])) > min(rank(case[0]),rank(case[1])):
+                    index = AHEAD
+                elif min(rank(my_cards[0]),rank(my_cards[1])) == min(rank(case[0]),rank(case[1])):
+                    index = TIED
+                else:
+                    index = BEHIND
+            else:
+                index = BEHIND
         else:
             index = BEHIND
         HPTotal[index] += 1
         #print(f"{i}/{len(opphands)} - {j}/{len(possible_rivers)}")
+        """
         for river in possible_rivers:
             j+=1
             
@@ -197,9 +210,11 @@ def hand_potential(my_cards: list[str], board: list[str]) -> float:
                 elif (ourbest == oppbest):
                     HP[index][TIED] += 1
                 else:
-                    HP[index][BEHIND] += 1
+                    HP[index][BEHIND] += 1"""
+                    
 
     print (HP)
+    print (HPTotal)
 
     p_pot = (HP[BEHIND][AHEAD] + (HP[BEHIND][TIED] / 2) + (HP[TIED][AHEAD] / 2)) / (HPTotal[BEHIND] + HPTotal[TIED])
     n_pot = (HP[AHEAD][BEHIND] + (HP[TIED][BEHIND] / 2) + (HP[AHEAD][TIED] / 2)) / (HPTotal[AHEAD] + HPTotal[TIED])
